@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Band of Brothers - Easy Company Route Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a0a;
+    color: #e8e4dc;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  #map {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+    background: #1a1a1a;
+  }
+
+  /* Map tiles - use voyager base darkened, not dark_all which is too dark */
+  #map .main-tiles { filter: brightness(0.45) saturate(0.4) contrast(1.3); }
+  #map .label-tiles { opacity: 1; }
+
+  /* Fade in tiles instead of popping */
+  .leaflet-tile {
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+  }
+  .leaflet-tile-loaded {
+    opacity: 1;
+  }
+
+  /* Keep tiles visible during zoom to prevent white flash */
+  .leaflet-fade-anim .leaflet-tile,
+  .leaflet-fade-anim .leaflet-popup {
+    transition: opacity 0.3s ease-in;
+  }
+  .leaflet-zoom-anim .leaflet-tile {
+    transition: none;
+  }
+  .leaflet-control-zoom { display: none; }
+
+  /* Top bar */
+  #topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    background: linear-gradient(180deg, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.7) 80%, transparent 100%);
+    padding: 16px 24px 32px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  #topbar-left h1 {
+    font-family: 'EB Garamond', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #c9a96e;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  #topbar-left .subtitle {
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  #episode-nav {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+
+  .ep-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid #333;
+    background: transparent;
+    color: #666;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  }
+  .ep-dot:hover { border-color: #c9a96e; color: #c9a96e; }
+  .ep-dot.active {
+    border-color: #c9a96e;
+    background: #c9a96e;
+    color: #0a0a0a;
+  }
+  .ep-dot.visited {
+    border-color: #555;
+    background: #333;
+    color: #aaa;
+  }
+
+  /* Bottom panel */
+  #panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 1000;
+    background: linear-gradient(0deg, rgba(10,10,10,0.97) 0%, rgba(10,10,10,0.92) 70%, rgba(10,10,10,0.6) 90%, transparent 100%);
+    padding: 40px 0 24px;
+    max-height: 52vh;
+    overflow: hidden;
+  }
+
+  #panel-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 32px;
+    overflow-y: auto;
+    max-height: calc(52vh - 64px);
+  }
+
+  #panel-inner::-webkit-scrollbar { width: 4px; }
+  #panel-inner::-webkit-scrollbar-track { background: transparent; }
+  #panel-inner::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .location-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+
+  .location-number {
+    font-family: 'EB Garamond', serif;
+    font-size: 48px;
+    font-weight: 700;
+    color: #c9a96e;
+    line-height: 1;
+    min-width: 50px;
+  }
+
+  .location-title {
+    font-family: 'EB Garamond', serif;
+    font-size: 28px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.2;
+  }
+
+  .episode-badge {
+    display: inline-block;
+    background: rgba(201,169,110,0.15);
+    color: #c9a96e;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+
+  .date-badge {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 12px;
+  }
+
+  .transport-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(201,169,110,0.08);
+    border: 1px solid rgba(201,169,110,0.2);
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-bottom: 14px;
+  }
+  .transport-badge svg {
+    width: 18px;
+    height: 18px;
+    fill: #c9a96e;
+    flex-shrink: 0;
+  }
+  .transport-badge .transport-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #c9a96e;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .location-summary {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #bbb;
+    margin-bottom: 14px;
+    font-style: italic;
+    font-family: 'EB Garamond', serif;
+    font-size: 16px;
+  }
+
+  .events-list {
+    list-style: none;
+    margin-bottom: 14px;
+  }
+  .events-list li {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #ccc;
+    padding: 3px 0 3px 16px;
+    position: relative;
+  }
+  .events-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 6px;
+    height: 6px;
+    background: #c9a96e;
+    border-radius: 50%;
+  }
+
+  .characters-section {
+    margin-bottom: 12px;
+  }
+  .characters-section h4 {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  .character-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: #aaa;
+    margin: 2px 4px 2px 0;
+  }
+
+  .landmarks-section {
+    margin-bottom: 12px;
+  }
+  .landmarks-section h4 {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  .landmark-item {
+    font-size: 12px;
+    color: #999;
+    padding: 2px 0;
+  }
+  .landmark-item .lm-name { color: #c9a96e; }
+
+  .wiki-link {
+    display: inline-block;
+    color: #6b9bd2;
+    font-size: 12px;
+    text-decoration: none;
+    border-bottom: 1px dotted #6b9bd2;
+    margin-top: 4px;
+  }
+  .wiki-link:hover { color: #8bb8ef; }
+
+  .historical-note {
+    background: rgba(201,169,110,0.08);
+    border-left: 3px solid #c9a96e;
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-size: 12px;
+    color: #bbb;
+    line-height: 1.5;
+  }
+
+  /* Navigation arrows */
+  #nav-arrows {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    z-index: 1001;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .nav-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid #444;
+    background: rgba(10,10,10,0.9);
+    color: #aaa;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .nav-btn:hover { border-color: #c9a96e; color: #c9a96e; }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+  .nav-btn:disabled:hover { border-color: #444; color: #aaa; }
+
+  .nav-counter {
+    font-size: 11px;
+    color: #666;
+    font-weight: 600;
+    letter-spacing: 1px;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  /* Keyboard hint */
+  #kbd-hint {
+    position: fixed;
+    bottom: 72px;
+    right: 24px;
+    z-index: 1001;
+    font-size: 10px;
+    color: #444;
+    text-align: right;
+  }
+  kbd {
+    display: inline-block;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    color: #666;
+  }
+
+  /* Sub-location dots */
+  .sub-nav {
+    display: flex;
+    gap: 6px;
+    margin: 8px 0 12px;
+    align-items: center;
+  }
+  .sub-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #333;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sub-dot.active { background: #c9a96e; width: 24px; border-radius: 4px; }
+  .sub-dot:hover { background: #666; }
+
+  /* Route line pulse */
+  @keyframes pulse { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
+
+  /* Custom markers */
+  .custom-marker {
+    background: none;
+    border: none;
+  }
+  .marker-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #c9a96e;
+    background: rgba(201,169,110,0.3);
+    transition: all 0.3s;
+  }
+  .marker-dot.active {
+    width: 20px;
+    height: 20px;
+    background: #c9a96e;
+    box-shadow: 0 0 20px rgba(201,169,110,0.5);
+  }
+  .marker-dot.visited {
+    border-color: #666;
+    background: rgba(102,102,102,0.3);
+  }
+  .marker-dot.future {
+    border-color: #333;
+    background: transparent;
+  }
+
+  /* Transport tooltip (moves with the icon) */
+  .transport-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    animation: ttFadeIn 0.3s ease-out 0.2s forwards;
+  }
+  .transport-tooltip .tt-dist {
+    background: rgba(10,10,10,0.9);
+    border: 1px solid rgba(201,169,110,0.5);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #c9a96e;
+    letter-spacing: 0.5px;
+  }
+  .transport-tooltip .tt-time {
+    background: rgba(10,10,10,0.8);
+    border-radius: 2px;
+    padding: 1px 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 500;
+    color: #aaa;
+    letter-spacing: 0.3px;
+  }
+  @keyframes ttFadeIn {
+    0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
+    100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  /* Animated transport icon on map */
+  .transport-mover {
+    background: none !important;
+    border: none !important;
+  }
+  .transport-mover-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 0 8px rgba(201,169,110,0.6));
+    transition: transform 0.1s linear;
+    position: relative;
+  }
+  .transport-mover-inner svg {
+    width: 32px;
+    height: 32px;
+    fill: #c9a96e;
+  }
+
+  /* Parachute drop animation */
+  @keyframes parachute-drop {
+    0% { transform: translateY(-60px) scale(0.5); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  .transport-mover-inner.anim-parachute {
+    animation: parachute-drop 2s ease-out forwards;
+  }
+  .transport-mover-inner.anim-parachute svg {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Ship bob */
+  @keyframes ship-bob {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+  }
+  .transport-mover-inner.moving-ship svg {
+    animation: ship-bob 0.8s ease-in-out infinite;
+  }
+
+  /* Walking bounce */
+  @keyframes walk-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
+  .transport-mover-inner.moving-on_foot svg {
+    animation: walk-bounce 0.35s ease-in-out infinite;
+  }
+
+  /* Truck rumble */
+  @keyframes truck-rumble {
+    0%, 100% { transform: translateY(0); }
+    25% { transform: translateY(-1.5px); }
+    75% { transform: translateY(1px); }
+  }
+  .transport-mover-inner.moving-truck svg {
+    animation: truck-rumble 0.25s ease-in-out infinite;
+  }
+
+  /* Jeep bounce */
+  @keyframes jeep-bounce {
+    0%, 100% { transform: translateY(0) rotate(0); }
+    30% { transform: translateY(-2px) rotate(1deg); }
+    70% { transform: translateY(1px) rotate(-0.5deg); }
+  }
+  .transport-mover-inner.moving-jeep svg {
+    animation: jeep-bounce 0.4s ease-in-out infinite;
+  }
+
+  /* Airplane fly */
+  @keyframes plane-tilt {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+  }
+  .transport-mover-inner.moving-airplane svg {
+    animation: plane-tilt 1.5s ease-in-out infinite;
+    width: 38px;
+    height: 38px;
+  }
+
+  /* Intro overlay */
+  #intro {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 2000;
+    background: #0a0a0a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 1s ease;
+  }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+  #intro h1 {
+    font-family: 'EB Garamond', serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: #c9a96e;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  #intro h2 {
+    font-family: 'EB Garamond', serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: #888;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  #intro .unit {
+    font-size: 12px;
+    color: #555;
+    letter-spacing: 1px;
+    margin-bottom: 40px;
+  }
+  #intro .start-btn {
+    background: transparent;
+    border: 1px solid #c9a96e;
+    color: #c9a96e;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 32px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  #intro .start-btn:hover {
+    background: #c9a96e;
+    color: #0a0a0a;
+  }
+  #intro .keys-note {
+    font-size: 11px;
+    color: #444;
+    margin-top: 16px;
+  }
+
+  /* Episode title flash */
+  #ep-flash {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1500;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  #ep-flash.show { opacity: 1; }
+  #ep-flash .ep-num {
+    font-family: 'EB Garamond', serif;
+    font-size: 14px;
+    color: #c9a96e;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  #ep-flash .ep-title {
+    font-family: 'EB Garamond', serif;
+    font-size: 48px;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 4px;
+  }
+
+  /* Progress bar at very top */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: #c9a96e;
+    z-index: 1001;
+    transition: width 0.5s ease;
+  }
+
+  /* ===== CALENDAR WIDGET ===== */
+  #calendar {
+    position: fixed;
+    bottom: 180px;
+    left: 24px;
+    z-index: 1001;
+    width: 100px;
+    height: 110px;
+    perspective: 600px;
+  }
+  .cal-base {
+    width: 100px;
+    height: 110px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .cal-rings {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 12px;
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    z-index: 3;
+  }
+  .cal-ring {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #333;
+    border: 1.5px solid #555;
+  }
+  .cal-month-bar {
+    position: absolute;
+    top: 12px; left: 0; right: 0;
+    height: 22px;
+    background: #8b2020;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-month-text {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .cal-body {
+    position: absolute;
+    top: 34px; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+  }
+  .cal-year {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+  .cal-day {
+    font-family: 'EB Garamond', serif;
+    font-size: 38px;
+    font-weight: 700;
+    color: #e8e4dc;
+    line-height: 1;
+  }
+  .cal-dow {
+    font-family: 'Inter', sans-serif;
+    font-size: 8px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 1px;
+  }
+
+  /* Flying pages */
+  .cal-page-fly {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100px;
+    height: 110px;
+    border-radius: 6px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 4;
+    transform-origin: top center;
+  }
+  .cal-page-fly .pfm {
+    position: absolute;
+    top: 12px; left: 0; right: 0;
+    height: 22px;
+    background: #8b2020;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-page-fly .pfm span {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .cal-page-fly .pfb {
+    position: absolute;
+    top: 34px; left: 0; right: 0; bottom: 0;
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .cal-page-fly .pfb .pfy {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 1px;
+  }
+  .cal-page-fly .pfb .pfd {
+    font-family: 'EB Garamond', serif;
+    font-size: 38px;
+    font-weight: 700;
+    color: #e8e4dc;
+    line-height: 1;
+  }
+
+  @keyframes page-fly-1 {
+    0% { transform: rotateX(0) translateY(0) scale(1); opacity: 1; }
+    30% { transform: rotateX(-40deg) translateY(-10px) scale(1); opacity: 1; }
+    100% { transform: rotateX(-120deg) translateY(-80px) translateX(30px) scale(0.6); opacity: 0; }
+  }
+  @keyframes page-fly-2 {
+    0% { transform: rotateX(0) translateY(0) scale(1); opacity: 1; }
+    25% { transform: rotateX(-35deg) translateY(-8px) scale(1); opacity: 1; }
+    100% { transform: rotateX(-100deg) translateY(-90px) translateX(-20px) scale(0.5); opacity: 0; }
+  }
+  @keyframes page-fly-3 {
+    0% { transform: rotateX(0) translateY(0) scale(1); opacity: 1; }
+    20% { transform: rotateX(-50deg) translateY(-12px) scale(1); opacity: 1; }
+    100% { transform: rotateX(-140deg) translateY(-70px) translateX(15px) scale(0.55); opacity: 0; }
+  }
+
+  /* ===== MINIMAP ===== */
+  #minimap-container {
+    position: fixed;
+    top: 76px;
+    right: 24px;
+    z-index: 1001;
+    width: 360px;
+    height: 240px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #111;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #minimap-container .mini-base-tiles {
+    filter: brightness(0.35) saturate(0.3) contrast(1.4);
+  }
+  #minimap-container .mini-label-tiles {
+    filter: brightness(2.5) saturate(0) contrast(2);
+    opacity: 0.9;
+  }
+  #minimap-container .leaflet-control-zoom { display: none; }
+  #minimap-container .leaflet-control-attribution { display: none !important; }
+  .minimap-label {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    z-index: 1002;
+    font-size: 8px;
+    font-weight: 600;
+    color: #555;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  .minimap-viewport {
+    border: 1.5px solid #c9a96e;
+    background: rgba(201,169,110,0.08);
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+    transition: all 0.8s ease;
+  }
+  /* Minimap marker override */
+  .mini-marker {
+    background: none !important;
+    border: none !important;
+  }
+  .mini-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #c9a96e;
+  }
+  .mini-dot.mini-active {
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    box-shadow: 0 0 8px #c9a96e;
+  }
+</style>
+</head>
+<body>
+
+<div id="intro">
+  <h2>HBO's</h2>
+  <h1>Band of Brothers</h1>
+  <div class="unit">Easy Company, 506th PIR, 101st Airborne Division</div>
+  <button class="start-btn" onclick="startMap()">Begin the Journey</button>
+  <div class="keys-note">Use <kbd>&larr;</kbd> <kbd>&rarr;</kbd> arrow keys to navigate &middot; <kbd>1</kbd>-<kbd>0</kbd> for episodes</div>
+</div>
+
+<div id="progress-bar"></div>
+
+<div id="topbar">
+  <div id="topbar-left">
+    <h1>Band of Brothers</h1>
+    <div class="subtitle">Easy Company Route Map &middot; July 1942 - September 1945</div>
+  </div>
+  <div id="episode-nav"></div>
+</div>
+
+<div id="map"></div>
+
+<div id="ep-flash">
+  <div class="ep-num"></div>
+  <div class="ep-title"></div>
+</div>
+
+<div id="panel">
+  <div id="panel-inner"></div>
+</div>
+
+<!-- Calendar widget -->
+<div id="calendar">
+  <div class="cal-base">
+    <div class="cal-rings"><div class="cal-ring"></div><div class="cal-ring"></div><div class="cal-ring"></div></div>
+    <div class="cal-month-bar"><span class="cal-month-text" id="cal-month">JULY</span></div>
+    <div class="cal-body">
+      <div class="cal-year" id="cal-year">1942</div>
+      <div class="cal-day" id="cal-day">20</div>
+      <div class="cal-dow" id="cal-dow"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Minimap -->
+<div id="minimap-container">
+  <div class="minimap-label">OVERVIEW</div>
+  <div id="minimap"></div>
+</div>
+
+<div id="kbd-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate &middot; <kbd>1</kbd>-<kbd>0</kbd> episodes
+</div>
+
+<div id="nav-arrows">
+  <button class="nav-btn" id="btn-prev" onclick="prev()">&larr;</button>
+  <div class="nav-counter" id="nav-counter">1 / 25</div>
+  <button class="nav-btn" id="btn-next" onclick="next()">&rarr;</button>
+</div>
+
+<script>
+const DATA = {
+  episodes: [
+    {
+      episode: 1, title: "Currahee", time: "July 1942 - June 5, 1944",
+      summary: "Easy Company trains at Camp Toccoa under Captain Herbert Sobel, ships to England for final preparations, and boards C-47s for the Normandy invasion.",
+      locations: [
+        {
+          name: "Camp Toccoa / Currahee Mountain", lat: 34.5773, lng: -83.3324, country: "USA", dates: "July - November 1942",
+          events: [
+            "Easy Company activated July 20, 1942",
+            "Brutal training under Captain Sobel - running Currahee Mountain (3 miles up, 3 down)",
+            "'Currahee' means 'stands alone' in Cherokee - adopted as their motto",
+            "Sobel's harsh discipline creates unit cohesion despite universal hatred of him"
+          ],
+          characters: ["Capt. Herbert Sobel", "1st Lt. Richard Winters", "1st Sgt. Carwood Lipton", "Pvt. Donald Malarkey", "Cpl. 'Bull' Randleman"],
+          landmarks: [
+            {name: "Currahee Military Museum", desc: "160 N Alexander St, Toccoa, GA 30577"},
+            {name: "Currahee Mountain Trail", desc: "The original trail is still hikeable - 3 miles to 1,735 ft summit"},
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Camp_Toccoa"
+        },
+        {
+          name: "Fort Benning, Georgia", lat: 32.3537, lng: -84.9488, country: "USA", dates: "Late 1942",
+          events: ["Parachute jump training and qualification", "Five qualifying jumps to earn jump wings", "Some men washed out during jump school"],
+          characters: ["Capt. Herbert Sobel", "1st Lt. Richard Winters"],
+          landmarks: [{name: "National Infantry Museum", desc: "1775 Legacy Way, Columbus, GA"}],
+          wiki: "https://en.wikipedia.org/wiki/Fort_Moore"
+        },
+        {
+          name: "Camp Mackall, North Carolina", lat: 35.0372, lng: -79.4962, country: "USA", dates: "Early 1943",
+          events: ["Advanced tactical training", "Unit-level exercises before overseas deployment"],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Camp_Mackall"
+        },
+        {
+          name: "Aldbourne, Wiltshire, England", lat: 51.4583, lng: -1.6205, country: "England", dates: "September 1943 - June 1944",
+          events: [
+            "Billeted in village of Aldbourne, quartered with local families",
+            "NCO revolt against Sobel - he's reassigned, Lt. Meehan takes command",
+            "Winters promoted, bonds formed with English villagers",
+            "Final preparations for D-Day invasion"
+          ],
+          characters: ["Capt. Sobel (relieved)", "Lt. Thomas Meehan III", "1st Lt. Richard Winters", "Sgt. William Guarnere"],
+          landmarks: [
+            {name: "Aldbourne village", desc: "Largely unchanged - billeting buildings still stand"},
+            {name: "The Blue Boar pub", desc: "Still operating, frequented by Easy Company"},
+            {name: "Memorial bench", desc: "Easy Company memorial on the village green"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Aldbourne"
+        },
+        {
+          name: "Upottery Airfield, Devon", lat: 50.8750, lng: -3.1500, country: "England", dates: "June 5, 1944 (evening)",
+          events: [
+            "Easy Company boards C-47 transport aircraft",
+            "Eisenhower visits 101st Airborne troops before takeoff",
+            "Planes depart for Normandy late evening June 5"
+          ],
+          characters: ["Gen. Dwight D. Eisenhower", "Lt. Thomas Meehan III", "1st Lt. Richard Winters"],
+          landmarks: [{name: "Upottery Airfield", desc: "Now farmland. Memorial stone for the 101st Airborne"}],
+          wiki: "https://en.wikipedia.org/wiki/RAF_Upottery"
+        }
+      ]
+    },
+    {
+      episode: 2, title: "Day of Days", time: "June 6, 1944",
+      summary: "D-Day. Easy Company paratroopers jump into Normandy. Scattered across the countryside, Winters assembles a scratch force and leads the legendary assault on Brecourt Manor.",
+      locations: [
+        {
+          name: "Normandy Drop Zone / Cotentin Peninsula", lat: 49.3833, lng: -1.2333, country: "France", dates: "June 6, 1944 ~0115 hrs",
+          events: [
+            "Paratroopers scattered by heavy flak - most miss drop zones",
+            "Lt. Meehan's plane shot down - all killed. Winters assumes command",
+            "Men rally by cricket clickers in the dark Norman countryside",
+            "Units from across the division mixed together"
+          ],
+          characters: ["Lt. Thomas Meehan III (KIA)", "1st Lt. Richard Winters", "Pvt. John Hall"],
+          wiki: "https://en.wikipedia.org/wiki/American_airborne_landings_in_Normandy"
+        },
+        {
+          name: "Brecourt Manor", lat: 49.3895, lng: -1.2080, country: "France", dates: "June 6, 1944 ~0830 hrs",
+          events: [
+            "Winters leads 13 men against four 105mm German guns firing on Utah Beach",
+            "Classic fire-and-maneuver assault through hedgerow trenches",
+            "All four guns destroyed - saving countless lives on Utah Beach",
+            "Still taught at West Point as textbook small-unit tactics",
+            "Winters awarded Distinguished Service Cross"
+          ],
+          characters: ["1st Lt. Richard Winters (DSC)", "Sgt. 'Bull' Randleman", "Cpl. Joe Toye", "SSgt. William Guarnere", "Sgt. Carwood Lipton"],
+          landmarks: [
+            {name: "Brecourt Manor site", desc: "Preserved field - hedgerows and gun positions still visible"},
+            {name: "Utah Beach Museum", desc: "Plage de la Madeleine, Sainte-Marie-du-Mont"},
+            {name: "Airborne Museum", desc: "14 Rue Eisenhower, Sainte-Mere-Eglise"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Br%C3%A9court_Manor_Assault"
+        },
+        {
+          name: "Sainte-Marie-du-Mont", lat: 49.3833, lng: -1.2167, country: "France", dates: "June 6, 1944",
+          events: ["Easy Company helps liberate the town", "Link-up with troops from Utah Beach", "Consolidation of the airborne bridgehead"],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Sainte-Marie-du-Mont"
+        }
+      ]
+    },
+    {
+      episode: 3, title: "Carentan", time: "June 10-14, 1944",
+      summary: "Easy Company attacks the strategically vital town of Carentan, linking Utah and Omaha beachheads, then faces a fierce German counterattack at Bloody Gulch.",
+      locations: [
+        {
+          name: "Purple Heart Lane (Carentan approach)", lat: 49.3042, lng: -1.2439, country: "France", dates: "June 10-12, 1944",
+          events: [
+            "Advance down exposed causeways under withering fire",
+            "Albert Blithe freezes - suffers hysterical blindness",
+            "Road earns nickname 'Purple Heart Lane' from heavy casualties",
+            "Guarnere kicks men forward under fire"
+          ],
+          characters: ["1st Lt. Richard Winters", "SSgt. 'Wild Bill' Guarnere", "Pvt. Albert Blithe"],
+          wiki: "https://en.wikipedia.org/wiki/Battle_of_Carentan"
+        },
+        {
+          name: "Carentan", lat: 49.3047, lng: -1.2478, country: "France", dates: "June 12, 1944",
+          events: [
+            "Dawn assault - street-by-street fighting through town",
+            "Germans withdraw - Carentan taken, linking Utah and Omaha",
+            "Blithe recovers his sight and returns to action",
+            "Strategically critical capture for Allied Normandy operations"
+          ],
+          characters: ["1st Lt. Richard Winters", "Pvt. Albert Blithe", "Lt. Welsh"],
+          landmarks: [
+            {name: "Dead Man's Corner Museum", desc: "2 Village de l'Amont, Saint-Come-du-Mont"},
+            {name: "Carentan town center", desc: "Town square and church from the fighting still stand"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Carentan"
+        },
+        {
+          name: "Bloody Gulch (Carentan outskirts)", lat: 49.3100, lng: -1.2200, country: "France", dates: "June 13, 1944",
+          events: [
+            "German 17th SS Panzergrenadier Division counterattacks",
+            "Fierce hedgerow fighting - Easy Company nearly overrun",
+            "Saved by armor from 2nd Armored Division",
+            "Blithe shot in the neck (survived - show's epilogue was wrong)",
+          ],
+          characters: ["Pvt. Albert Blithe (WIA)", "1st Lt. Richard Winters", "SSgt. Guarnere"],
+          note: "The show states Blithe died in 1948. He actually lived until 1967 and served in Korea.",
+          wiki: "https://en.wikipedia.org/wiki/Battle_of_Bloody_Gulch"
+        }
+      ]
+    },
+    {
+      episode: 4, title: "Replacements", time: "September 17-20, 1944",
+      summary: "After rest in England, Easy Company receives green replacements and jumps into Holland for Operation Market Garden. They face a disastrous engagement at Nuenen.",
+      locations: [
+        {
+          name: "Aldbourne, England (return)", lat: 51.4583, lng: -1.6205, country: "England", dates: "July - September 1944",
+          events: [
+            "Return to Aldbourne for rest and refit after Normandy",
+            "New replacement soldiers join - veterans wary of them",
+            "Bull Randleman takes newcomers under his wing"
+          ],
+          characters: ["Capt. Richard Winters", "Pvt. James Miller (replacement)", "SSgt. 'Bull' Randleman"],
+        },
+        {
+          name: "Son / Drop Zone near Zon", lat: 51.5153, lng: 5.4969, country: "Netherlands", dates: "September 17, 1944",
+          events: [
+            "Daylight jump into Holland - Operation Market Garden",
+            "Much better organized than D-Day drop",
+            "Bridge at Son blown before capture",
+            "Advance toward Eindhoven begins"
+          ],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Operation_Market_Garden"
+        },
+        {
+          name: "Eindhoven", lat: 51.4416, lng: 5.4697, country: "Netherlands", dates: "September 18, 1944",
+          events: [
+            "Easy Company helps liberate Eindhoven",
+            "Dutch civilians celebrate wildly in the streets",
+            "Women who fraternized with Germans have heads shaved",
+            "Celebration cut short by German bombing that night"
+          ],
+          characters: [],
+          landmarks: [{name: "Hell's Highway markers", desc: "The corridor from Eindhoven to Arnhem is marked with monuments"}],
+          wiki: "https://en.wikipedia.org/wiki/Eindhoven"
+        },
+        {
+          name: "Nuenen", lat: 51.4728, lng: 5.5497, country: "Netherlands", dates: "September 19-20, 1944",
+          events: [
+            "Sent to Nuenen - Vincent van Gogh's former hometown",
+            "Encounter with German Panzer and SS units",
+            "Bull Randleman separated, hides in barn with Dutch family",
+            "Replacement Pvt. Miller killed - reality for new men",
+            "Easy Company forced to withdraw"
+          ],
+          characters: ["SSgt. 'Bull' Randleman", "Pvt. James Miller (KIA)", "Capt. Richard Winters"],
+          note: "Nuenen is where Van Gogh painted 'The Potato Eaters' and other early works.",
+          landmarks: [{name: "Vincentre (Van Gogh Museum)", desc: "Berg 29, 5671 CA Nuenen"}],
+          wiki: "https://en.wikipedia.org/wiki/Nuenen"
+        }
+      ]
+    },
+    {
+      episode: 5, title: "Crossroads", time: "October - November 1944",
+      summary: "Winters leads an attack on a German crossroads, is promoted to battalion XO, and struggles with leaving Easy Company. Directed by Tom Hanks.",
+      locations: [
+        {
+          name: "The Crossroads (near Veghel)", lat: 51.5900, lng: 5.5200, country: "Netherlands", dates: "October 5, 1944",
+          events: [
+            "Winters leads attack on German SS troops at a road junction",
+            "Personally shoots two SS soldiers eating breakfast",
+            "Easy Company takes the crossroads with minimal casualties",
+            "One of Winters' most intense personal combat experiences - haunts him"
+          ],
+          characters: ["Capt. Richard Winters", "1st Lt. Lewis Nixon", "SSgt. Carwood Lipton"],
+          wiki: "https://en.wikipedia.org/wiki/Operation_Market_Garden"
+        },
+        {
+          name: "The Island (Waal-Rhine rivers)", lat: 51.8833, lng: 5.8500, country: "Netherlands", dates: "October - November 1944",
+          events: [
+            "After Market Garden fails, 101st holds 'The Island'",
+            "Miserable low-lying ground between Waal and Rhine",
+            "Constant patrolling and skirmishing",
+            "Winters promoted to Major, becomes battalion XO",
+            "Moose Heyliger shot by friendly sentry"
+          ],
+          characters: ["Maj. Richard Winters (promoted)", "Lt. Moose Heyliger (WIA)", "Capt. Lewis Nixon"],
+          note: "Operation Market Garden ultimately failed to capture the bridge at Arnhem.",
+          wiki: "https://en.wikipedia.org/wiki/The_Island_(Netherlands)"
+        },
+        {
+          name: "Mourmelon-le-Grand, France", lat: 49.1333, lng: 4.0333, country: "France", dates: "Late Nov - Dec 18, 1944",
+          events: [
+            "Sent to Camp Mourmelon for rest and refit",
+            "Men get passes to Paris and Reims",
+            "Brief normalcy before emergency orders arrive Dec 18",
+            "Rushed to Bastogne - Battle of the Bulge begins"
+          ],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Mourmelon-le-Grand"
+        }
+      ]
+    },
+    {
+      episode: 6, title: "Bastogne", time: "December 19, 1944 - January 1945",
+      summary: "Told from medic Eugene Roe's perspective. Easy Company endures brutal cold, constant shelling, and severe supply shortages in the Ardennes forest during the Battle of the Bulge.",
+      locations: [
+        {
+          name: "Bastogne / Bois Jacques", lat: 50.0000, lng: 5.7167, country: "Belgium", dates: "December 19, 1944 - January 1945",
+          events: [
+            "Rushed to Bastogne by truck with inadequate winter gear",
+            "Dug foxholes in frozen Bois Jacques forest NE of Bastogne",
+            "Surrounded by Germans - the famous siege of Bastogne",
+            "Severe shortages: ammo, medical supplies, food, winter clothing",
+            "Constant artillery - tree bursts cause horrific casualties",
+            "Medic Roe works tirelessly with almost no supplies",
+            "Roe befriends Belgian nurse Renee Lemaire",
+            "Renee killed when Germans bomb the aid station on Christmas Eve"
+          ],
+          characters: ["T/5 Eugene 'Doc' Roe (POV)", "Renee Lemaire (KIA)", "SSgt. Carwood Lipton", "Sgt. Joe Toye", "SSgt. Guarnere", "Maj. Winters"],
+          landmarks: [
+            {name: "Bastogne War Museum", desc: "Colline du Mardasson 5, 6600 Bastogne"},
+            {name: "Mardasson Memorial", desc: "Star-shaped memorial to 76,890 American casualties"},
+            {name: "Bois Jacques (Jack's Wood)", desc: "Foxholes still visible between Bastogne and Foy"},
+            {name: "McAuliffe Square", desc: "Sherman tank and bust of the general who said 'Nuts!'"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Siege_of_Bastogne"
+        }
+      ]
+    },
+    {
+      episode: 7, title: "The Breaking Point", time: "January 1945",
+      summary: "Easy Company attacks Foy under incompetent Lt. Dike, who freezes. Speirs takes command mid-battle in one of the series' most iconic moments.",
+      locations: [
+        {
+          name: "Bois Jacques foxhole positions", lat: 50.0100, lng: 5.7200, country: "Belgium", dates: "Early January 1945",
+          events: [
+            "Toye and Guarnere both lose legs in same artillery barrage",
+            "Lt. Dike in command but frequently absent and ineffective",
+            "1st Sgt. Lipton effectively runs the company",
+            "Morale at lowest point of the war"
+          ],
+          characters: ["1st Sgt. Carwood Lipton (POV)", "Sgt. Joe Toye (lost right leg)", "SSgt. 'Wild Bill' Guarnere (lost leg helping Toye)", "Lt. Norman Dike", "Maj. Winters"],
+        },
+        {
+          name: "Foy", lat: 50.0075, lng: 5.7194, country: "Belgium", dates: "January 13, 1945",
+          events: [
+            "Easy Company ordered to assault Foy",
+            "Lt. Dike freezes in the open - company pinned down",
+            "Winters orders Lt. Speirs to relieve Dike mid-assault",
+            "Speirs' legendary run THROUGH German lines, links up with I Company, runs back",
+            "Most iconic moment of the entire series",
+            "Foy captured - Speirs becomes permanent Easy Company CO"
+          ],
+          characters: ["Lt. Ronald Speirs", "Lt. Norman Dike (relieved)", "Maj. Richard Winters", "1st Sgt. Carwood Lipton"],
+          landmarks: [
+            {name: "Foy village", desc: "Still standing between Bastogne and Noville. Walking tours available."},
+            {name: "Attack route", desc: "The field between Bois Jacques and Foy is open farmland - walkable"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Foy,_Luxembourg_(Belgium)"
+        },
+        {
+          name: "Noville", lat: 50.0333, lng: 5.7500, country: "Belgium", dates: "Mid-January 1945",
+          events: ["After Foy, Easy Company continues advance", "Takes Noville in bitter cold", "Finally pulled off the Ardennes line"],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Noville"
+        },
+        {
+          name: "Rachamps", lat: 50.0450, lng: 5.7300, country: "Belgium", dates: "Mid-January 1945",
+          events: ["Advance through Rachamps", "Belgian civilians emerge from cellars after liberation"],
+          characters: [],
+        }
+      ]
+    },
+    {
+      episode: 8, title: "The Last Patrol", time: "January - February 1945",
+      summary: "Easy Company holds positions along the Moder River near Haguenau in Alsace. A dangerous night patrol is ordered. Winters falsifies a report to save lives.",
+      locations: [
+        {
+          name: "Haguenau, Alsace", lat: 48.8117, lng: 7.7908, country: "France", dates: "Late Jan - Feb 1945",
+          events: [
+            "Deployed along the Moder River in Haguenau",
+            "Night patrol across river captures two German POWs",
+            "David Webster returns from hospital - tension with veterans",
+            "Second patrol ordered but Winters falsifies the report, saying it was done",
+            "Eugene Jackson killed during patrol",
+            "Nixon's drinking problem worsens"
+          ],
+          characters: ["Maj. Richard Winters", "Pvt. David K. Webster (POV)", "Sgt. 'Pat' Martin", "Pvt. Eugene Jackson (KIA)", "Capt. Lewis Nixon", "Lt. Ronald Speirs"],
+          landmarks: [
+            {name: "Haguenau town center", desc: "Historic Alsatian town - many WWII-era buildings survive"},
+            {name: "Moder River", desc: "The river Easy Company patrolled across"},
+            {name: "Musee Historique", desc: "9 Rue du Marechal Foch, 67500 Haguenau"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Haguenau"
+        },
+        {
+          name: "Mourmelon-le-Grand (return)", lat: 49.1333, lng: 4.0333, country: "France", dates: "February - March 1945",
+          events: [
+            "Return to Mourmelon for rest",
+            "101st Airborne awarded Presidential Unit Citation by Eisenhower",
+            "First and only time in WWII an entire division received this honor"
+          ],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Mourmelon-le-Grand"
+        }
+      ]
+    },
+    {
+      episode: 9, title: "Why We Fight", time: "March - April 1945",
+      summary: "Easy Company pushes into Germany and discovers the horrors of Kaufering concentration camp. The discovery gives the men a reason for everything they endured.",
+      locations: [
+        {
+          name: "Rhine Crossing into Germany", lat: 50.3569, lng: 7.5986, country: "Germany", dates: "March 1945",
+          events: [
+            "Easy Company crosses the Rhine into Germany",
+            "Rapid advance through collapsing resistance",
+            "German soldiers surrendering in large numbers"
+          ],
+          characters: [],
+          wiki: "https://en.wikipedia.org/wiki/Ruhr_pocket"
+        },
+        {
+          name: "Bavarian advance", lat: 48.0333, lng: 10.7167, country: "Germany", dates: "April 1945",
+          events: [
+            "Advance into the Bavarian heartland",
+            "Nixon discovers his wife has filed for divorce",
+            "Nixon's drinking hits its worst - one-man raid on a German house for alcohol"
+          ],
+          characters: ["Capt. Lewis Nixon", "Maj. Richard Winters"],
+        },
+        {
+          name: "Kaufering IV concentration camp", lat: 48.0833, lng: 10.8667, country: "Germany", dates: "April 27, 1945",
+          events: [
+            "Easy Company discovers Kaufering IV - a subcamp of Dachau",
+            "Emaciated, dying prisoners in striped uniforms",
+            "Bodies stacked; evidence of SS attempts to destroy evidence",
+            "Discovery profoundly shocks every soldier",
+            "Local German civilians ordered to help with burial",
+            "Liebgott (Jewish) acts as translator with prisoners"
+          ],
+          characters: ["Maj. Richard Winters", "Pvt. Joseph Liebgott (translator)", "Capt. Lewis Nixon"],
+          landmarks: [
+            {name: "KZ-Gedenkstatte Kaufering", desc: "Memorial and preserved remains of the camp"},
+            {name: "European Holocaust Memorial", desc: "Memorial complex near Landsberg am Lech"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Kaufering_concentration_camp"
+        },
+        {
+          name: "Landsberg am Lech", lat: 48.0500, lng: 10.8700, country: "Germany", dates: "Late April 1945",
+          events: [
+            "Easy Company occupies Landsberg",
+            "The prison where Hitler was held in 1924 is in this town",
+            "Local civilians claim ignorance of the nearby camps"
+          ],
+          characters: [],
+          note: "Hitler wrote Mein Kampf while imprisoned in Landsberg in 1924.",
+          wiki: "https://en.wikipedia.org/wiki/Landsberg_am_Lech"
+        }
+      ]
+    },
+    {
+      episode: 10, title: "Points", time: "April - September 1945",
+      summary: "Easy Company captures Berchtesgaden and the Eagle's Nest as the war ends. The men celebrate V-E Day and the points system determines who goes home. The real veterans close the series.",
+      locations: [
+        {
+          name: "Munich area (advance)", lat: 48.1351, lng: 11.5820, country: "Germany", dates: "Late April 1945",
+          events: ["Continued advance through Bavaria", "German resistance crumbling", "Race with French forces to reach Berchtesgaden"],
+          characters: [],
+        },
+        {
+          name: "Berchtesgaden", lat: 47.6300, lng: 13.0044, country: "Germany", dates: "May 4-5, 1945",
+          events: [
+            "Easy Company arrives at Hitler's mountain retreat",
+            "Loot the Berghof (Hitler's residence) and Nazi leader residences",
+            "Nixon finds Goering's wine and liquor collection",
+            "Soldiers take souvenirs from the ruins",
+            "Winters reflects on everything they've accomplished"
+          ],
+          characters: ["Maj. Richard Winters", "Capt. Lewis Nixon", "Capt. Ronald Speirs"],
+          landmarks: [
+            {name: "Berghof ruins", desc: "Mostly destroyed by bombing. Site accessible, little remains."},
+            {name: "Documentation Center Obersalzberg", desc: "Salzbergstrasse 41, 83471 Berchtesgaden"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Berchtesgaden"
+        },
+        {
+          name: "Eagle's Nest (Kehlsteinhaus)", lat: 47.6117, lng: 13.0417, country: "Germany", dates: "May 5, 1945",
+          events: [
+            "Easy Company reaches the Eagle's Nest at 6,017 feet",
+            "Building largely intact - men explore the rooms",
+            "Winters sits alone on the terrace overlooking the Alps",
+            "Symbolic end of the European campaign",
+            "V-E Day celebrated May 8, 1945"
+          ],
+          characters: ["Maj. Richard Winters", "Capt. Lewis Nixon", "Capt. Ronald Speirs"],
+          landmarks: [{name: "Kehlsteinhaus (Eagle's Nest)", desc: "Open May-October. Bus + brass elevator through mountain. Restaurant with panoramic views."}],
+          wiki: "https://en.wikipedia.org/wiki/Kehlsteinhaus"
+        },
+        {
+          name: "Zell am See / Kaprun, Austria", lat: 47.3237, lng: 12.7985, country: "Austria", dates: "May - September 1945",
+          events: [
+            "Easy Company occupies Zell am See for occupation duty",
+            "Idyllic Alpine setting - swimming, boating, relaxation",
+            "Points system determines discharge order",
+            "Japan surrenders August 15 - war truly over",
+            "Speirs stays in Army; Winters goes home",
+            "Real veterans appear in closing interviews on brotherhood"
+          ],
+          characters: ["Maj. Richard Winters", "Capt. Lewis Nixon", "Capt. Ronald Speirs", "Sgt. 'Shifty' Powers"],
+          landmarks: [
+            {name: "Zell am See", desc: "Popular Austrian resort - Grand Hotel where officers stayed still operates"},
+            {name: "Kaprun", desc: "Alpine village where enlisted men were quartered"}
+          ],
+          wiki: "https://en.wikipedia.org/wiki/Zell_am_See"
+        }
+      ]
+    }
+  ]
+};
+
+// Transport modes for each stop (indexed by flat order across all episodes)
+// on_foot, truck, train, ship, airplane, parachute, jeep
+const TRANSPORT_MODES = [
+  // Ep 1: Toccoa, Benning, Mackall, Aldbourne, Upottery
+  'on_foot',    // Camp Toccoa - training on foot
+  'truck',      // Fort Benning - trucked to jump school
+  'truck',      // Camp Mackall - trucked
+  'ship',       // Aldbourne - shipped across Atlantic
+  'truck',      // Upottery - trucked to airfield
+  // Ep 2: Drop Zone, Brecourt, Ste-Marie-du-Mont
+  'parachute',  // Normandy drop
+  'on_foot',    // Brecourt Manor - on foot assault
+  'on_foot',    // Sainte-Marie-du-Mont
+  // Ep 3: Purple Heart Lane, Carentan, Bloody Gulch
+  'on_foot',    // Purple Heart Lane - on foot advance
+  'on_foot',    // Carentan - dawn assault on foot
+  'on_foot',    // Bloody Gulch - defensive position
+  // Ep 4: Aldbourne return, Son/Zon, Eindhoven, Nuenen
+  'ship',       // Aldbourne return - shipped back to England
+  'parachute',  // Son/Zon - daylight jump
+  'on_foot',    // Eindhoven - marched in
+  'on_foot',    // Nuenen - on foot patrol
+  // Ep 5: Crossroads, The Island, Mourmelon
+  'on_foot',    // Crossroads - attack on foot
+  'on_foot',    // The Island - defensive positions
+  'truck',      // Mourmelon - trucked to rest area
+  // Ep 6: Bastogne
+  'truck',      // Bastogne - emergency truck convoy
+  // Ep 7: Bois Jacques, Foy, Noville, Rachamps
+  'on_foot',    // Bois Jacques foxholes
+  'on_foot',    // Foy assault
+  'on_foot',    // Noville advance
+  'on_foot',    // Rachamps advance
+  // Ep 8: Haguenau, Mourmelon return
+  'truck',      // Haguenau - trucked to Alsace
+  'truck',      // Mourmelon return
+  // Ep 9: Rhine, Bavaria, Kaufering, Landsberg
+  'truck',      // Rhine crossing - trucks + boats
+  'truck',      // Bavarian advance - trucks + on foot
+  'on_foot',    // Kaufering camp - discovered on foot
+  'on_foot',    // Landsberg
+  // Ep 10: Munich, Berchtesgaden, Eagle's Nest, Zell am See
+  'truck',      // Munich area - motorized advance
+  'truck',      // Berchtesgaden - trucks
+  'on_foot',    // Eagle's Nest - climbed up
+  'jeep',       // Zell am See - jeeps/vehicles to Austria
+];
+
+// Anchor dates for the calendar [month (0-indexed), day, year]
+// Using approximate midpoints for ranges
+const DATE_ANCHORS = [
+  // Ep 1
+  [6, 20, 1942],   // Camp Toccoa - Jul 20, 1942
+  [10, 15, 1942],  // Fort Benning - Nov 1942
+  [1, 15, 1943],   // Camp Mackall - Feb 1943
+  [8, 15, 1943],   // Aldbourne - Sep 1943
+  [5, 5, 1944],    // Upottery - Jun 5, 1944
+  // Ep 2
+  [5, 6, 1944],    // Normandy drop - Jun 6, 1944
+  [5, 6, 1944],    // Brecourt - Jun 6, 1944
+  [5, 6, 1944],    // Ste-Marie-du-Mont - Jun 6, 1944
+  // Ep 3
+  [5, 10, 1944],   // Purple Heart Lane - Jun 10
+  [5, 12, 1944],   // Carentan - Jun 12
+  [5, 13, 1944],   // Bloody Gulch - Jun 13
+  // Ep 4
+  [6, 15, 1944],   // Aldbourne return - Jul 1944
+  [8, 17, 1944],   // Son/Zon - Sep 17
+  [8, 18, 1944],   // Eindhoven - Sep 18
+  [8, 20, 1944],   // Nuenen - Sep 20
+  // Ep 5
+  [9, 5, 1944],    // Crossroads - Oct 5
+  [9, 20, 1944],   // The Island - Oct-Nov
+  [10, 25, 1944],  // Mourmelon - Late Nov
+  // Ep 6
+  [11, 19, 1944],  // Bastogne - Dec 19
+  // Ep 7
+  [0, 3, 1945],    // Bois Jacques - Early Jan
+  [0, 13, 1945],   // Foy - Jan 13
+  [0, 16, 1945],   // Noville - Mid Jan
+  [0, 18, 1945],   // Rachamps - Mid Jan
+  // Ep 8
+  [0, 28, 1945],   // Haguenau - Late Jan
+  [1, 15, 1945],   // Mourmelon return - Feb
+  // Ep 9
+  [2, 15, 1945],   // Rhine crossing - Mar
+  [3, 10, 1945],   // Bavarian advance - Apr
+  [3, 27, 1945],   // Kaufering - Apr 27
+  [3, 28, 1945],   // Landsberg - Late Apr
+  // Ep 10
+  [3, 30, 1945],   // Munich area - Late Apr
+  [4, 4, 1945],    // Berchtesgaden - May 4
+  [4, 5, 1945],    // Eagle's Nest - May 5
+  [4, 20, 1945],   // Zell am See - May-Sep
+];
+
+const MONTH_NAMES = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+const TRANSPORT_ICONS = {
+  on_foot: {
+    label: 'On Foot',
+    svg: `<svg viewBox="0 0 24 24"><path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/></svg>`
+  },
+  truck: {
+    label: 'Transport Truck',
+    svg: `<svg viewBox="0 0 24 24"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>`
+  },
+  ship: {
+    label: 'Troop Ship',
+    svg: `<svg viewBox="0 0 24 24"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.15.52-.06.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/></svg>`
+  },
+  airplane: {
+    label: 'C-47 Transport',
+    svg: `<svg viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>`
+  },
+  parachute: {
+    label: 'Parachute Drop',
+    svg: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6 2 10.5c0 .5.04 1 .13 1.5h3.87l2-4 2 4h4l2-4 2 4h3.87c.09-.5.13-1 .13-1.5C22 6 17.52 2 12 2z"/><path d="M12 14l-1.5 3v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V17L12 14z"/><line x1="8" y1="12" x2="10.5" y2="17" stroke="currentColor" stroke-width="0.7" fill="none"/><line x1="16" y1="12" x2="13.5" y2="17" stroke="currentColor" stroke-width="0.7" fill="none"/></svg>`
+  },
+  jeep: {
+    label: 'Jeep / Vehicle',
+    svg: `<svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>`
+  }
+};
+
+// Flatten all locations
+let allStops = [];
+DATA.episodes.forEach(ep => {
+  ep.locations.forEach((loc, i) => {
+    allStops.push({ ...loc, episode: ep.episode, epTitle: ep.title, epTime: ep.time, epSummary: ep.summary, subIndex: i, subTotal: ep.locations.length });
+  });
+});
+
+// Assign transport modes and date anchors
+allStops.forEach((stop, i) => {
+  stop.transport = TRANSPORT_MODES[i] || 'on_foot';
+  if (DATE_ANCHORS[i]) {
+    stop.calMonth = DATE_ANCHORS[i][0];
+    stop.calDay = DATE_ANCHORS[i][1];
+    stop.calYear = DATE_ANCHORS[i][2];
+  }
+});
+
+// Calculate distance in km between two lat/lng pairs (Haversine)
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Smarter zoom based on distance from previous stop
+function getTargetZoom(stop, prevStop) {
+  if (stop.country === 'USA') return 6;
+  if (!prevStop) return 8;
+  const dist = haversineKm(prevStop.lat, prevStop.lng, stop.lat, stop.lng);
+  if (dist < 3) return 14;
+  if (dist < 10) return 13;
+  if (dist < 30) return 12;
+  if (dist < 80) return 11;
+  if (dist < 150) return 10;
+  if (dist < 300) return 9;
+  if (dist < 600) return 8;
+  if (dist < 1200) return 7;
+  return 5;
+}
+
+let currentIndex = 0;
+let previousIndex = -1;
+let map;
+let minimap;
+let minimapMarkers = [];
+let minimapRouteLine;
+let minimapActiveRoute;
+let markers = [];
+let routeLine;
+let activeRouteLine;
+let transportMarker = null;
+let animationId = null;
+let isAnimating = false;
+
+function initMap() {
+  map = L.map('map', {
+    center: [48, 5],
+    zoom: 5,
+    zoomControl: false,
+    attributionControl: false,
+    fadeAnimation: true,
+    zoomAnimation: true
+  });
+
+  // Voyager base (has terrain, roads, water - much more visible than dark_all)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    className: 'main-tiles',
+    keepBuffer: 8,           // Keep 8 tiles beyond the viewport (default 2)
+    updateWhenZooming: false, // Don't swap tiles mid-zoom
+    updateWhenIdle: false     // Update continuously during pan
+  }).addTo(map);
+  // Light labels designed for dark backgrounds
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    className: 'label-tiles',
+    keepBuffer: 8,
+    updateWhenZooming: false,
+    updateWhenIdle: false
+  }).addTo(map);
+
+  // Full route line (dim)
+  const routeCoords = allStops.map(s => [s.lat, s.lng]);
+  routeLine = L.polyline(routeCoords, { color: '#333', weight: 1.5, dashArray: '4 6', smoothFactor: 0 }).addTo(map);
+
+  // Active route line (bright, up to current)
+  activeRouteLine = L.polyline([], { color: '#c9a96e', weight: 2.5, opacity: 0.7, smoothFactor: 0 }).addTo(map);
+
+  // Create markers
+  allStops.forEach((stop, i) => {
+    const el = document.createElement('div');
+    el.className = 'marker-dot future';
+    el.id = `marker-${i}`;
+    const icon = L.divIcon({ className: 'custom-marker', html: el.outerHTML, iconSize: [14, 14], iconAnchor: [7, 7] });
+    const marker = L.marker([stop.lat, stop.lng], { icon }).addTo(map);
+    marker.on('click', () => goTo(i));
+    markers.push(marker);
+  });
+
+  // Episode nav dots
+  const nav = document.getElementById('episode-nav');
+  for (let i = 1; i <= 10; i++) {
+    const d = document.createElement('div');
+    d.className = 'ep-dot';
+    d.textContent = i === 10 ? '0' : i;
+    d.onclick = () => goToEpisode(i);
+    d.id = `ep-dot-${i}`;
+    nav.appendChild(d);
+  }
+
+  // ===== MINIMAP =====
+  minimap = L.map('minimap', {
+    center: [34.5, -81],
+    zoom: 4,
+    zoomControl: false,
+    attributionControl: false,
+    dragging: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: false,
+    boxZoom: false,
+    keyboard: false
+  });
+  // Give the minimap div a fixed size
+  document.getElementById('minimap').style.cssText = 'width:360px;height:240px;';
+
+  // Minimap base (darkened) + labels (bright, separate filter)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    className: 'mini-base-tiles'
+  }).addTo(minimap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    className: 'mini-label-tiles'
+  }).addTo(minimap);
+
+  // Route line on minimap (full route, dim)
+  minimapRouteLine = L.polyline(routeCoords, { color: '#555', weight: 1.5, opacity: 0.4, dashArray: '3 5' }).addTo(minimap);
+
+  // Active route on minimap (bright, vector)
+  minimapActiveRoute = L.polyline([], { color: '#c9a96e', weight: 3, opacity: 0.9 }).addTo(minimap);
+
+  // Minimap markers
+  allStops.forEach((stop, i) => {
+    const dotHtml = `<div class="mini-dot"></div>`;
+    const icon = L.divIcon({ className: 'mini-marker', html: dotHtml, iconSize: [5, 5], iconAnchor: [2, 2] });
+    const m = L.marker([stop.lat, stop.lng], { icon, interactive: false }).addTo(minimap);
+    minimapMarkers.push(m);
+  });
+}
+
+function getTransportSvg(mode) {
+  return TRANSPORT_ICONS[mode] ? TRANSPORT_ICONS[mode].svg : TRANSPORT_ICONS['on_foot'].svg;
+}
+
+function getSegmentInfo(fromIdx, toIdx) {
+  const prev = allStops[fromIdx];
+  const curr = allStops[toIdx];
+  const distKm = haversineKm(prev.lat, prev.lng, curr.lat, curr.lng);
+  let distText;
+  if (distKm < 1) distText = `${Math.round(distKm * 1000)} m`;
+  else if (distKm < 100) distText = `${distKm.toFixed(1)} km`;
+  else distText = `${Math.round(distKm).toLocaleString()} km`;
+
+  const prevDate = new Date(prev.calYear, prev.calMonth, prev.calDay);
+  const currDate = new Date(curr.calYear, curr.calMonth, curr.calDay);
+  const diffDays = Math.round((currDate - prevDate) / (1000 * 60 * 60 * 24));
+  let timeText;
+  if (diffDays === 0) timeText = 'Same day';
+  else if (diffDays === 1) timeText = '1 day';
+  else if (diffDays < 30) timeText = `${diffDays} days`;
+  else if (diffDays < 365) {
+    const months = Math.round(diffDays / 30.44);
+    timeText = months === 1 ? '~1 month' : `~${months} months`;
+  } else {
+    const years = (diffDays / 365.25).toFixed(1);
+    timeText = years === '1.0' ? '~1 year' : `~${years} years`;
+  }
+  return { distText, timeText };
+}
+
+function tooltipHtml(distText, timeText) {
+  return `<div class="transport-tooltip"><div class="tt-dist">${distText}</div><div class="tt-time">${timeText}</div></div>`;
+}
+
+function createTransportMarkerIcon(mode, extraClass, segInfo) {
+  const svg = getTransportSvg(mode);
+  const tt = segInfo ? tooltipHtml(segInfo.distText, segInfo.timeText) : '';
+  const html = `<div class="transport-mover-inner ${extraClass || ''}">${tt}${svg}</div>`;
+  return L.divIcon({
+    className: 'transport-mover',
+    html: html,
+    iconSize: [140, 80],
+    iconAnchor: [70, 60]
+  });
+}
+
+function clearTransportMarker() {
+  if (transportMarker) {
+    map.removeLayer(transportMarker);
+    transportMarker = null;
+  }
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
+  isAnimating = false;
+}
+
+function interpolate(from, to, t) {
+  return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
+}
+
+function animateTransport(fromIdx, toIdx, targetZoom, callback) {
+  const fromStop = allStops[fromIdx];
+  const toStop = allStops[toIdx];
+  const mode = toStop.transport;
+  const from = [fromStop.lat, fromStop.lng];
+  const to = [toStop.lat, toStop.lng];
+  const segInfo = getSegmentInfo(fromIdx, toIdx);
+  const distKm = haversineKm(from[0], from[1], to[0], to[1]);
+
+  clearTransportMarker();
+  isAnimating = true;
+
+  // Pick a single zoom that shows the journey nicely - don't change zoom during animation
+  // Use a zoom that fits both points with padding, but not lower than 4
+  const bounds = L.latLngBounds([from, to]);
+  const travelZoom = Math.max(map.getBoundsZoom(bounds.pad(0.6)), 4);
+
+  // Duration scales with distance
+  const baseDurations = { on_foot: 2500, truck: 2000, ship: 3200, airplane: 1800, parachute: 1800, jeep: 2000 };
+  const base = baseDurations[mode] || 2200;
+  const distScale = 0.7 + Math.min(distKm / 400, 1) * 0.8;
+  const duration = Math.round(base * distScale);
+
+  // Phase 1: Zoom out to show both points (if needed), centered on midpoint
+  const midLat = (from[0] + to[0]) / 2;
+  const midLng = (from[1] + to[1]) / 2;
+  const currentZoom = map.getZoom();
+
+  // Only zoom out if the travel zoom is significantly different
+  const needsZoomOut = travelZoom < currentZoom - 1;
+  const zoomOutDuration = needsZoomOut ? 600 : 0;
+
+  if (needsZoomOut) {
+    map.setView([midLat, midLng], travelZoom, { animate: true, duration: 0.5 });
+  }
+
+  // Phase 2: After zoom-out settles, start the icon animation
+  setTimeout(() => {
+    // Create the transport icon with tooltip
+    const icon = createTransportMarkerIcon(mode, `moving-${mode}`, segInfo);
+    transportMarker = L.marker(from, { icon, zIndexOffset: 2000 }).addTo(map);
+
+    // Flip SVG if going west
+    const dx = to[1] - from[1];
+    requestAnimationFrame(() => {
+      const el = transportMarker.getElement();
+      if (el && dx < 0) {
+        const svg = el.querySelector('.transport-mover-inner svg');
+        if (svg) svg.style.transform = 'scaleX(-1)';
+      }
+    });
+
+    const startTime = performance.now();
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const pos = interpolate(from, to, eased);
+
+      // Move the icon
+      transportMarker.setLatLng(pos);
+
+      // Pan map to follow icon - keep zoom constant (no tile reloads!)
+      map.panTo(pos, { animate: false });
+
+      if (t < 1) {
+        animationId = requestAnimationFrame(step);
+      } else {
+        // Phase 3: Zoom into destination
+        map.flyTo(to, targetZoom, { duration: 0.8, easeLinearity: 0.25 });
+
+        if (mode === 'parachute') {
+          map.removeLayer(transportMarker);
+          const paraIcon = createTransportMarkerIcon('parachute', 'anim-parachute', segInfo);
+          transportMarker = L.marker(to, { icon: paraIcon, zIndexOffset: 2000 }).addTo(map);
+          setTimeout(() => {
+            isAnimating = false;
+            if (callback) callback();
+          }, 1500);
+        } else {
+          isAnimating = false;
+          if (callback) callback();
+        }
+      }
+    }
+    animationId = requestAnimationFrame(step);
+  }, zoomOutDuration);
+}
+
+// Preload tiles around a lat/lng at given zoom + nearby zooms
+function preloadTilesAround(lat, lng, zoom) {
+  const servers = ['a', 'b', 'c'];
+  const baseUrls = [
+    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',
+    'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png'
+  ];
+
+  // Preload at the target zoom and one level out
+  const zooms = [zoom, Math.max(zoom - 1, 3), Math.max(zoom - 2, 3)];
+  zooms.forEach(z => {
+    const n = Math.pow(2, z);
+    const x = Math.floor((lng + 180) / 360 * n);
+    const latRad = lat * Math.PI / 180;
+    const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    // 5x5 grid around center tile
+    const range = z === zoom ? 2 : 1;
+    for (let ddx = -range; ddx <= range; ddx++) {
+      for (let ddy = -range; ddy <= range; ddy++) {
+        baseUrls.forEach(url => {
+          const img = new Image();
+          const s = servers[(ddx + ddy + 10) % 3];
+          img.src = url.replace('{s}', s).replace('{z}', z).replace('{x}', x + ddx).replace('{y}', y + ddy);
+        });
+      }
+    }
+  });
+}
+
+// Preload the midpoint tiles for a journey between two stops
+function preloadJourneyTiles(fromStop, toStop, targetZoom) {
+  // Preload tiles along the route at the travel zoom
+  const bounds = L.latLngBounds([[fromStop.lat, fromStop.lng], [toStop.lat, toStop.lng]]);
+  const travelZoom = Math.max(map.getBoundsZoom(bounds.pad(0.6)), 4);
+  const midLat = (fromStop.lat + toStop.lat) / 2;
+  const midLng = (fromStop.lng + toStop.lng) / 2;
+  preloadTilesAround(midLat, midLng, travelZoom);
+  preloadTilesAround(fromStop.lat, fromStop.lng, travelZoom);
+  preloadTilesAround(toStop.lat, toStop.lng, travelZoom);
+  preloadTilesAround(toStop.lat, toStop.lng, targetZoom);
+}
+
+function goTo(index, skipAnimation) {
+  if (index < 0 || index >= allStops.length) return;
+  if (isAnimating) {
+    clearTransportMarker();
+  }
+
+  const prev = currentIndex;
+  currentIndex = index;
+
+  const isAdjacentStep = Math.abs(index - prev) === 1 && !skipAnimation && prev >= 0;
+
+  if (isAdjacentStep) {
+    const stop = allStops[currentIndex];
+    const prevStop = prev >= 0 ? allStops[prev] : null;
+    const targetZoom = getTargetZoom(stop, prevStop);
+
+    // Stop any ongoing Leaflet animations
+    map.stop();
+
+    // Preload tiles for the current journey BEFORE starting animation
+    preloadJourneyTiles(prevStop, stop, targetZoom);
+
+    // Animate transport - map follows the icon, always centered
+    animateTransport(prev, currentIndex, targetZoom, () => {
+      setTimeout(() => clearTransportMarker(), 1500);
+    });
+
+    // Update panel and other UI immediately
+    renderUI();
+
+    // Preload tiles for the next 2 stops (for when the user presses arrow again)
+    for (let i = 1; i <= 2; i++) {
+      const nextIdx = currentIndex + i;
+      if (nextIdx < allStops.length) {
+        const ns = allStops[nextIdx];
+        const nz = getTargetZoom(ns, stop);
+        preloadJourneyTiles(stop, ns, nz);
+      }
+      const prevIdx = currentIndex - i;
+      if (prevIdx >= 0) {
+        const ps = allStops[prevIdx];
+        const pz = getTargetZoom(ps, stop);
+        preloadJourneyTiles(stop, ps, pz);
+      }
+    }
+  } else {
+    clearTransportMarker();
+    render();
+
+    // Preload tiles for adjacent stops in both directions
+    for (let i = -2; i <= 2; i++) {
+      const nextIdx = currentIndex + i;
+      if (nextIdx >= 0 && nextIdx < allStops.length && nextIdx !== currentIndex) {
+        const ns = allStops[nextIdx];
+        const nz = getTargetZoom(ns, allStops[currentIndex]);
+        preloadTilesAround(ns.lat, ns.lng, nz);
+        // Also preload the journey between current and next
+        preloadJourneyTiles(allStops[currentIndex], ns, nz);
+      }
+    }
+  }
+
+  previousIndex = index;
+}
+
+function goToEpisode(ep) {
+  const idx = allStops.findIndex(s => s.episode === ep);
+  if (idx >= 0) {
+    flashEpisode(ep);
+    goTo(idx, true);
+  }
+}
+
+function flashEpisode(ep) {
+  const epData = DATA.episodes[ep - 1];
+  const flash = document.getElementById('ep-flash');
+  flash.querySelector('.ep-num').textContent = `Episode ${ep}`;
+  flash.querySelector('.ep-title').textContent = `"${epData.title}"`;
+  flash.classList.add('show');
+  setTimeout(() => flash.classList.remove('show'), 1500);
+}
+
+function next() { goTo(currentIndex + 1); }
+function prev() { goTo(currentIndex - 1); }
+
+// Full render (map pan + UI) - used for jumps (episode click, first load)
+function render() {
+  const stop = allStops[currentIndex];
+  const prevStop = currentIndex > 0 ? allStops[currentIndex - 1] : null;
+  const targetZoom = getTargetZoom(stop, prevStop);
+  map.flyTo([stop.lat, stop.lng], targetZoom, { duration: 2.5, easeLinearity: 0.15 });
+  renderUI();
+}
+
+// UI-only render (markers, panel, dots) - used when goTo handles map pan + animation
+function renderUI() {
+  const stop = allStops[currentIndex];
+
+  // Update markers
+  allStops.forEach((s, i) => {
+    const el = document.createElement('div');
+    if (i < currentIndex) el.className = 'marker-dot visited';
+    else if (i === currentIndex) el.className = 'marker-dot active';
+    else el.className = 'marker-dot future';
+    const icon = L.divIcon({ className: 'custom-marker', html: el.outerHTML, iconSize: [i === currentIndex ? 20 : 14, i === currentIndex ? 20 : 14], iconAnchor: [i === currentIndex ? 10 : 7, i === currentIndex ? 10 : 7] });
+    markers[i].setIcon(icon);
+  });
+
+  // Update active route line
+  const activeCoords = allStops.slice(0, currentIndex + 1).map(s => [s.lat, s.lng]);
+  activeRouteLine.setLatLngs(activeCoords);
+
+  // Update episode dots
+  for (let i = 1; i <= 10; i++) {
+    const dot = document.getElementById(`ep-dot-${i}`);
+    const epStopsForDot = allStops.filter(s => s.episode === i);
+    const firstIdx = allStops.indexOf(epStopsForDot[0]);
+    const lastIdx = allStops.indexOf(epStopsForDot[epStopsForDot.length - 1]);
+    dot.className = 'ep-dot';
+    if (currentIndex >= firstIdx && currentIndex <= lastIdx) dot.classList.add('active');
+    else if (currentIndex > lastIdx) dot.classList.add('visited');
+  }
+
+  // Progress bar
+  const pct = ((currentIndex + 1) / allStops.length) * 100;
+  document.getElementById('progress-bar').style.width = pct + '%';
+
+  // Nav counter
+  document.getElementById('nav-counter').textContent = `${currentIndex + 1} / ${allStops.length}`;
+  document.getElementById('btn-prev').disabled = currentIndex === 0;
+  document.getElementById('btn-next').disabled = currentIndex === allStops.length - 1;
+
+  // Panel content
+  const panel = document.getElementById('panel-inner');
+
+  const epStops = allStops.filter(s => s.episode === stop.episode);
+  const subDots = epStops.map((s, i) => {
+    const globalIdx = allStops.indexOf(s);
+    return `<div class="sub-dot ${globalIdx === currentIndex ? 'active' : ''}" onclick="goTo(${globalIdx})"></div>`;
+  }).join('');
+
+  let html = `
+    <div class="episode-badge">Episode ${stop.episode}: "${stop.epTitle}" &middot; ${stop.epTime}</div>
+    <div class="sub-nav">${subDots}</div>
+    <div class="location-header">
+      <div class="location-number">${String(currentIndex + 1).padStart(2, '0')}</div>
+      <div>
+        <div class="location-title">${stop.name}</div>
+        <div class="date-badge">${stop.dates} &middot; ${stop.country}</div>
+      </div>
+    </div>
+    <div class="transport-badge">
+      ${TRANSPORT_ICONS[stop.transport].svg}
+      <span class="transport-label">${TRANSPORT_ICONS[stop.transport].label}</span>
+    </div>
+  `;
+
+  if (currentIndex === allStops.indexOf(epStops[0])) {
+    html += `<div class="location-summary">${stop.epSummary}</div>`;
+  }
+
+  html += '<ul class="events-list">';
+  stop.events.forEach(e => { html += `<li>${e}</li>`; });
+  html += '</ul>';
+
+  if (stop.note) {
+    html += `<div class="historical-note"><strong>Historical note:</strong> ${stop.note}</div>`;
+  }
+
+  if (stop.characters && stop.characters.length > 0) {
+    html += '<div class="characters-section"><h4>Key Figures</h4>';
+    stop.characters.forEach(c => { html += `<span class="character-tag">${c}</span>`; });
+    html += '</div>';
+  }
+
+  if (stop.landmarks && stop.landmarks.length > 0) {
+    html += '<div class="landmarks-section"><h4>Visit Today</h4>';
+    stop.landmarks.forEach(l => { html += `<div class="landmark-item"><span class="lm-name">${l.name}</span> - ${l.desc}</div>`; });
+    html += '</div>';
+  }
+
+  if (stop.wiki) {
+    html += `<a class="wiki-link" href="${stop.wiki}" target="_blank" rel="noopener">Read more on Wikipedia &rarr;</a>`;
+  }
+
+  panel.innerHTML = html;
+  panel.scrollTop = 0;
+
+  // ===== UPDATE CALENDAR =====
+  updateCalendar(stop);
+
+  // ===== UPDATE MINIMAP =====
+  updateMinimap();
+}
+
+// Calendar state
+let lastCalMonth = -1;
+let lastCalYear = -1;
+
+function updateCalendar(stop) {
+  const m = stop.calMonth;
+  const d = stop.calDay;
+  const y = stop.calYear;
+
+  // Calculate months elapsed since previous stop for page-fly count
+  const prevStop = currentIndex > 0 ? allStops[currentIndex - 1] : null;
+  let monthsElapsed = 0;
+  if (prevStop) {
+    monthsElapsed = (y * 12 + m) - (prevStop.calYear * 12 + prevStop.calMonth);
+  }
+
+  // Cap flying pages to avoid overwhelming the screen
+  const flyCount = Math.min(Math.max(monthsElapsed, 0), 12);
+
+  // Spawn flying pages before updating the static calendar
+  if (flyCount > 0 && prevStop) {
+    spawnFlyingPages(prevStop, flyCount);
+  }
+
+  // Update static calendar (with slight delay so pages fly first)
+  const delay = flyCount > 0 ? 300 : 0;
+  setTimeout(() => {
+    document.getElementById('cal-month').textContent = MONTH_NAMES[m];
+    document.getElementById('cal-year').textContent = y;
+    document.getElementById('cal-day').textContent = d;
+
+    // Day of week (approximate)
+    try {
+      const dt = new Date(y, m, d);
+      document.getElementById('cal-dow').textContent = DOW_NAMES[dt.getDay()];
+    } catch(e) {
+      document.getElementById('cal-dow').textContent = '';
+    }
+
+    // Color the month bar seasonally
+    const bar = document.querySelector('.cal-month-bar');
+    if (m >= 11 || m <= 1) bar.style.background = '#2c4a6e'; // winter blue
+    else if (m >= 2 && m <= 4) bar.style.background = '#3d6b3d'; // spring green
+    else if (m >= 5 && m <= 7) bar.style.background = '#8b2020'; // summer red
+    else bar.style.background = '#8b6914'; // autumn gold
+  }, delay);
+
+  lastCalMonth = m;
+  lastCalYear = y;
+}
+
+function spawnFlyingPages(prevStop, count) {
+  const cal = document.getElementById('calendar');
+  const animations = ['page-fly-1', 'page-fly-2', 'page-fly-3'];
+
+  // Generate intermediate months
+  let startM = prevStop.calMonth;
+  let startY = prevStop.calYear;
+
+  for (let i = 0; i < count; i++) {
+    const pm = (startM + i) % 12;
+    const py = startY + Math.floor((startM + i) / 12);
+
+    const page = document.createElement('div');
+    page.className = 'cal-page-fly';
+    page.style.background = '#1a1a1a';
+
+    // Season color
+    let barColor;
+    if (pm >= 11 || pm <= 1) barColor = '#2c4a6e';
+    else if (pm >= 2 && pm <= 4) barColor = '#3d6b3d';
+    else if (pm >= 5 && pm <= 7) barColor = '#8b2020';
+    else barColor = '#8b6914';
+
+    page.innerHTML = `
+      <div class="pfm" style="background:${barColor}"><span>${MONTH_NAMES[pm]}</span></div>
+      <div class="pfb"><div class="pfy">${py}</div><div class="pfd">&mdash;</div></div>
+    `;
+
+    const anim = animations[i % animations.length];
+    const stagger = i * (count > 6 ? 80 : 150);
+    page.style.animation = `${anim} 0.9s ease-out ${stagger}ms forwards`;
+
+    cal.appendChild(page);
+
+    // Clean up after animation
+    setTimeout(() => {
+      if (page.parentNode) page.parentNode.removeChild(page);
+    }, stagger + 1000);
+  }
+}
+
+function updateMinimap() {
+  if (!minimap) return;
+
+  // Update minimap markers
+  allStops.forEach((s, i) => {
+    const isActive = i === currentIndex;
+    const dotHtml = `<div class="mini-dot ${isActive ? 'mini-active' : ''}"></div>`;
+    const size = isActive ? 7 : 5;
+    const icon = L.divIcon({ className: 'mini-marker', html: dotHtml, iconSize: [size, size], iconAnchor: [Math.floor(size/2), Math.floor(size/2)] });
+    minimapMarkers[i].setIcon(icon);
+  });
+
+  // Update active route on minimap
+  const activeCoords = allStops.slice(0, currentIndex + 1).map(s => [s.lat, s.lng]);
+  minimapActiveRoute.setLatLngs(activeCoords);
+
+  // Center minimap directly on current stop
+  const stop = allStops[currentIndex];
+  const lat = stop.lat;
+  const lng = stop.lng;
+
+  // Zoom out enough to always see country borders for context
+  let mZoom;
+  if (stop.country === 'USA') {
+    mZoom = 4;
+  } else {
+    mZoom = 5; // always show country-level context in Europe
+  }
+
+  // Use setView (not flyTo) for reliability, with invalidateSize to force layout
+  minimap.invalidateSize();
+  minimap.setView([lat, lng], mZoom, { animate: true, duration: 0.8 });
+}
+
+function startMap() {
+  document.getElementById('intro').classList.add('hidden');
+  setTimeout(() => document.getElementById('intro').style.display = 'none', 1000);
+  flashEpisode(1);
+  goTo(0, true);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (document.getElementById('intro').style.display !== 'none' && !document.getElementById('intro').classList.contains('hidden')) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startMap(); }
+    return;
+  }
+  if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j') { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'k') { e.preventDefault(); prev(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); prev(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); next(); }
+  else if (e.key >= '1' && e.key <= '9') { goToEpisode(parseInt(e.key)); }
+  else if (e.key === '0') { goToEpisode(10); }
+});
+
+// Touch swipe support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(diff) > 50) {
+    if (diff < 0) next();
+    else prev();
+  }
+});
+
+// Init
+initMap();
+
+// Preload tiles for the first 5 stops while user reads the intro screen
+setTimeout(() => {
+  for (let i = 0; i < Math.min(5, allStops.length); i++) {
+    const s = allStops[i];
+    const z = s.country === 'USA' ? 6 : 9;
+    preloadTilesAround(s.lat, s.lng, z);
+    if (i > 0) {
+      preloadJourneyTiles(allStops[i-1], s, z);
+    }
+  }
+}, 500);
+</script>
+</body>
+</html>
